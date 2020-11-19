@@ -33,6 +33,11 @@ def define_env(env):
         return f'[:octicons-mark-github-16: EVA 2 / {name}]({env.conf["eva_links"][name.lower()]})'
 
     @env.macro
+    def eva_download_button(name):
+        return f'[Download :octicons-download-24:]({env.conf["eva_links"][name.lower()]}/archive/main.zip){{: .md-button .md-button--primary }}'
+        
+
+    @env.macro
     def onshape_link(name):
         return f'[:octicons-file-binary-24: Onshape: {name}]({env.conf["onshape"][name.lower()]})'
 
