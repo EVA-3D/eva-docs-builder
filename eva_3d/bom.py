@@ -46,7 +46,3 @@ def define_env(env):
         return {
             name: getattr(env, name) for name in dir(env) if not name.startswith("_")
         }
-
-    @env.macro
-    def badge(content):
-        return f"<button>{content}</button>"
