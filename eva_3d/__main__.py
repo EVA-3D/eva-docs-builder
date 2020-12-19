@@ -15,7 +15,8 @@ def main():
 @click.argument("bom-file", type=click.File("r"))
 @click.argument("zip-file", type=click.Path(exists=True))
 @click.argument("stl-out-dir", type=click.Path())
-def unpack_stls(bom_file, zip_file, stl_out_dir):
+@click.option("--remove_stl_dir", is_flag=True)
+def unpack_stls(bom_file, zip_file, stl_out_dir, remove_stl_dir):
     files = set()
     reader = csv.DictReader(bom_file, delimiter=",", quotechar='"')
     for row in reader:
@@ -27,8 +28,8 @@ def unpack_stls(bom_file, zip_file, stl_out_dir):
             files.add(f"{row['Name']}.stl")
 
     stl_out_dir = Path(stl_out_dir)
-    # if Path(stl_out_dir).exists():
-    #     shutil.rmtree(stl_out_dir)
+    if Path(stl_out_dir).exists() and remove_stl_dir:
+        shutil.rmtree(stl_out_dir)
     stl_out_dir.mkdir(exist_ok=True)
 
     with zipfile.ZipFile(zip_file, 'r') as zip_ref:
@@ -44,7 +45,7 @@ def unpack_stls(bom_file, zip_file, stl_out_dir):
             continue
         stl_file.rename(Path(stl_file.parent, new_name))
 
-    print("works!")
+    print(f"Unpacked {zip_file} according to {bom_file.name} to {stl_out_dir}")
 
 
 if __name__ == "__main__":
