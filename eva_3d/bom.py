@@ -15,6 +15,11 @@ def define_env(env):
             if index != 0:
                 if row[3].upper() == "PETG":
                     row[2] = f"[{row[2]}](stls/{row[2]}.stl)"
+                    row[3] = "Yes"
+                else:
+                    row[3] = ""
+            if index == 0:
+                row[3] = "Printable"
             yield "{}| {} |".format(indent_str, " | ".join(row))
             if index == 0:
                 yield "{}| {} |".format(
