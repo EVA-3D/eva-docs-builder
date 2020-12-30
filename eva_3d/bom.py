@@ -6,9 +6,8 @@ from pathlib import Path
 def define_env(env):
 
     env.variables.download_url = (
-        f'{env.conf["repo_url"]}/archive/{env.conf["version"]}.zip'
+        f'{env.conf["repo_url"]}/raw/{env.conf["version"]}/stls.zip'
     )
-    # import ipdb; ipdb.set_trace()
 
     def generate_bom_table(reader, indent_str=""):
         for index, row in enumerate(reader):
