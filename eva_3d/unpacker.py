@@ -5,11 +5,10 @@ import shutil
 
 
 class Unpacker:
-
     def __init__(self):
         self.zip_cache = set()
         self.pages = []
-        
+
     def _is_zip(self, path) -> bool:
         return path.is_file() and path.suffix == ".zip"
 
@@ -47,20 +46,24 @@ class Unpacker:
                         stl_file_names.add(f'{row["Name"]}.stl')
         return stl_file_names
 
-    def _unpack_zip(self, path):
-        print(path)
-
     def unpack_all(self, all_stls):
+        shutil.rmtree(all_stls, ignore_errors=True)
+        all_stls.mkdir()
         for page in self.pages:
-            zip_files = self._find_zip_files(page)
+            page_dir = (Path(page.file.abs_src_path) / "..").resolve()
+            stl_path = page_dir / "stls"
+
+            zip_files = list(self._find_zip_files(page))
             missing_files = set()
             extracted_files = set()
             files_from_bom = set()
-            for zip_path in zip_files:
-                print(f"Extracting {zip_path}")
-                stl_path = zip_path.parent.parent / "stls"
+
+            if zip_files:
                 shutil.rmtree(stl_path, ignore_errors=True)
                 stl_path.mkdir()
+
+            for zip_path in zip_files:
+                print(f"Extracting {zip_path}")
                 files_from_bom = self.get_files_from_boms(zip_path)
                 with ZipFile(zip_path) as zip_file:
                     for file_name in zip_file.namelist():
@@ -73,8 +76,11 @@ class Unpacker:
                         if new_file_name in files_from_bom:
                             zip_file.extract(file_name, stl_path)
                             shutil.move(stl_path / file_name, stl_path / new_file_name)
-                            shutil.copy(stl_path / new_file_name, all_stls)
                             extracted_files.add(new_file_name)
+
+            if stl_path.exists():
+                shutil.copytree(stl_path, all_stls, dirs_exist_ok=True)
+            
             missing_files = files_from_bom.difference(extracted_files)
             if missing_files:
                 raise Exception(
@@ -84,4 +90,4 @@ class Unpacker:
     def archive(self, all_stls):
         with ZipFile(all_stls.parent / "stls.zip", "w", ZIP_DEFLATED) as zip_file:
             for file_path in all_stls.iterdir():
-                zip_file.write(file_path)
+                zip_file.write(file_path, file_path.name)

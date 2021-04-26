@@ -1,6 +1,34 @@
 from typing import Union
 
+from jinja2 import Markup
+from jinja2._compat import text_type
 from pydantic import BaseModel
+
+
+_js_escapes = {
+    '\\': '\\u005C',
+    '\'': '\\u0027',
+    '"': '\\u0022',
+    '>': '\\u003E',
+    '<': '\\u003C',
+    '&': '\\u0026',
+    '=': '\\u003D',
+    '-': '\\u002D',
+    ';': '\\u003B',
+    '`': '\\u0060',
+    '\u2028': '\\u2028',
+    '\u2029': '\\u2029'
+}
+
+
+def escapejs(s):
+    if hasattr(s, "__html__"):
+        return Markup(s.__html__())
+
+    s = text_type(s)
+    for key, value in _js_escapes.items():
+        s = s.replace(key, value)
+    return Markup(s)
 
 
 class PropertyBaseModel(BaseModel):

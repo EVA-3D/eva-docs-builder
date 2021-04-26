@@ -19,7 +19,7 @@ def unpack():
     mkdocs_config = config.load_config(site_dir="/tmp/eva-3d-unpack")
     build.build(mkdocs_config)
     unpacker =  mkdocs_config["plugins"]["eva-3d-plugin"].unpacker
-    all_stls = (Path(".") / "docs" / "stls").absolute()
+    all_stls = (Path(".") / "stls").absolute()
     unpacker.unpack_all(all_stls)
     unpacker.archive(all_stls)
 

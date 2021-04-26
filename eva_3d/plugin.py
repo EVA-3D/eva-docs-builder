@@ -1,12 +1,15 @@
 import csv
 import json
+from base64 import b64encode
 from pathlib import Path
+import shutil
 
-from jinja2 import Environment, Markup
+from jinja2 import Environment, Markup, FileSystemLoader
 from mkdocs.plugins import BasePlugin
 
 from eva_3d.models import get_page_meta, ItemEntry, Bom
 from eva_3d.unpacker import Unpacker
+from eva_3d.utils import escapejs
 
 
 BADGE_CSS_CLASSES = {
@@ -17,22 +20,29 @@ BADGE_CSS_CLASSES = {
 
 
 class EVAPlugin(BasePlugin):
+
     def on_config(self, config):
         self.context = {}
-        self.env = Environment()
+        self.env = Environment(loader=FileSystemLoader(config["theme"].dirs))
         self.bom_cache = {}
         self.unpacker = Unpacker()
 
-    def _get_context(self, page, config):
+    def _get_markdown_context(self, page, config):
         return {
             "meta": page.meta,
             "config": config,
-            "eva_download_button": self.get_download_button,
+            "download_button": self.download_button,
+            "cad_link": self.cad_link,
             "bom_to_md_table": self.bom_to_md_table,
             "bom_to_json": self.bom_to_json,
-            "box": self.box(),
+            "icon": self.get_icon,
             **self.context,
         }
+
+    def get_icon(self, icon_name: str) -> str:
+        path = "/".join(icon_name.split("-", 2))
+        icon = self.env.loader.load(self.env, f".icons/{path}.svg").render()
+        return f'<i class="twemoji">{icon}</i>'
 
     def _generate_bom(self, file_path: str) -> Bom:
         if not file_path in self.bom_cache:
@@ -52,6 +62,7 @@ class EVAPlugin(BasePlugin):
                 parts=parts,
                 satisfies=self.page.meta.satisfies or [],
                 type=self.page.meta.type,
+                cad_url=self.page.meta.cad_url,
             )
 
         return self.bom_cache[file_path]
@@ -74,25 +85,31 @@ class EVAPlugin(BasePlugin):
 
     def bom_to_json(self, file_path: str):
         bom = self._generate_bom(file_path=file_path)
-        return json.dumps(bom.dict())
+        return b64encode(json.dumps(bom.dict()).encode()).decode()
 
-    def box(self):
-        return Markup(
-            '<a class="md-button md-button--primary">{% include ".icons/fontawesome/solid/truck-loading.svg" %}</a>'
-        )
+    @property
+    def cad_link(self):
+        if not self.page.meta.cad_url:
+            return ""
+        return f"[:fontawesome-solid-file-import: CAD]({self.page.meta.cad_url}){{: .md-button .md-button--primary target='_blank'}}"
 
-    def get_download_button(self):
+    @property
+    def download_button(self):
         if not self.page.meta.repo_url:
-            raise Exception("repo_url meta missing")
-        return f"[Download :octicons-download-24:]({self.page.meta.repo_url}/archive/main.zip){{: .md-button .md-button--primary }}"
+            return ""
+        return f"[:octicons-download-24: Download]({self.page.meta.repo_url}/archive/main.zip){{: .md-button .md-button--primary }}"
 
-    def render(self, markdown, page, config):
+    def render_markdown(self, markdown, page, config):
         md_template = self.env.from_string(markdown)
-        return md_template.render(**self._get_context(page, config))
+        return md_template.render(**self._get_markdown_context(page, config))
 
     def on_page_markdown(self, markdown, page, config, files):
         self.unpacker.add_page(page)
         self.page = page
         self.page.meta = get_page_meta(page)
         self.config = config
-        return self.render(markdown, page, config)
+        return self.render_markdown(markdown, page, config)
+
+    def on_post_build(self, config):
+        all_stls = Path(config['docs_dir']).parent / "stls"
+        shutil.copytree(all_stls, Path(config['site_dir']) / "stls")

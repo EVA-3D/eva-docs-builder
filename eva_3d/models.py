@@ -44,6 +44,7 @@ class Bom(BaseModel):
     parts: List[ItemEntry]
     type: str
     satisfies: List[Satisfies]
+    cad_url: Optional[str] = None
 
 
 def get_page_meta(page):
