@@ -1,15 +1,18 @@
+import sys
 import csv
-import json
-from base64 import b64encode
+import hashlib
+import logging
 from pathlib import Path
 import shutil
 
-from jinja2 import Environment, Markup, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader
 from mkdocs.plugins import BasePlugin
 
 from eva_3d.models import get_page_meta, ItemEntry, Bom
 from eva_3d.unpacker import Unpacker
-from eva_3d.utils import escapejs
+from eva_3d.utils import escapeb64
+from eva_3d.db import get_db_connection, initialize_db, get_superbom, get_vendor_superbom, truncate_vendor_mapping
+from eva_3d.bom import BOMLoader
 
 
 BADGE_CSS_CLASSES = {
@@ -19,13 +22,19 @@ BADGE_CSS_CLASSES = {
 }
 
 
-class EVAPlugin(BasePlugin):
+log = logging.getLogger('mkdocs.plugins')
 
+class EVAPlugin(BasePlugin):
     def on_config(self, config):
         self.context = {}
         self.env = Environment(loader=FileSystemLoader(config["theme"].dirs))
-        self.bom_cache = {}
+        self.env.filters["b64encode"] = escapeb64
         self.unpacker = Unpacker()
+
+        self.db_conn = get_db_connection()
+        initialize_db(self.db_conn)
+
+        self.bom_loader = BOMLoader(self.db_conn)
 
     def _get_markdown_context(self, page, config):
         return {
@@ -33,8 +42,7 @@ class EVAPlugin(BasePlugin):
             "config": config,
             "download_button": self.download_button,
             "cad_link": self.cad_link,
-            "bom_to_md_table": self.bom_to_md_table,
-            "bom_to_json": self.bom_to_json,
+            "get_bom": self.get_bom,
             "icon": self.get_icon,
             **self.context,
         }
@@ -44,48 +52,8 @@ class EVAPlugin(BasePlugin):
         icon = self.env.loader.load(self.env, f".icons/{path}.svg").render()
         return f'<i class="twemoji">{icon}</i>'
 
-    def _generate_bom(self, file_path: str) -> Bom:
-        if not file_path in self.bom_cache:
-            parts = []
-            page_src_path = Path(self.page.file.abs_src_path)
-            with open(page_src_path.parent / "bom" / file_path, newline="") as csvfile:
-                for row in csv.DictReader(csvfile, delimiter=",", quotechar='"'):
-                    item = ItemEntry(
-                        name=row["Name"],
-                        qty=row["Quantity"],
-                        material=row["Material"],
-                    )
-                    if item.type == "printable":
-                        item.url = f"/stls/{row['Name']}.stl"
-                    parts.append(item)
-            self.bom_cache[file_path] = Bom(
-                parts=parts,
-                satisfies=self.page.meta.satisfies or [],
-                type=self.page.meta.type,
-                cad_url=self.page.meta.cad_url,
-            )
-
-        return self.bom_cache[file_path]
-
-    def _generate_bom_table(self, bom, indent_str=""):
-        for index, item in enumerate(bom.parts):
-            if index == 0:
-                yield f"| Item | Quantity | Name | Type |"
-                yield "{}| {} |".format(
-                    indent_str, " | ".join(["-" * len(str(col)) for col in range(4)])
-                )
-            if item.url:
-                yield f"{indent_str}| {index + 1} | {item.qty} | [{item.name}]({item.url}) | {item.type} |"
-            else:
-                yield f"{indent_str}| {index + 1} | {item.qty} | {item.name} | {item.type} |"
-
-    def bom_to_md_table(self, file_path: str, indent=0):
-        bom = self._generate_bom(file_path=file_path)
-        return "\n".join(self._generate_bom_table(bom, " " * indent))
-
-    def bom_to_json(self, file_path: str):
-        bom = self._generate_bom(file_path=file_path)
-        return b64encode(json.dumps(bom.dict()).encode()).decode()
+    def get_cache_key(self, file_path):
+        return hashlib.sha256(f"{self.page}:{file_path}".encode()).hexdigest()
 
     @property
     def cad_link(self):
@@ -99,6 +67,9 @@ class EVAPlugin(BasePlugin):
             return ""
         return f"[:octicons-download-24: Download]({self.page.meta.repo_url}/archive/main.zip){{: .md-button .md-button--primary }}"
 
+    def get_bom(self, bom_source_id):
+        return self.page.boms_cache[bom_source_id]
+
     def render_markdown(self, markdown, page, config):
         md_template = self.env.from_string(markdown)
         return md_template.render(**self._get_markdown_context(page, config))
@@ -108,8 +79,52 @@ class EVAPlugin(BasePlugin):
         self.page = page
         self.page.meta = get_page_meta(page)
         self.config = config
+        self.page.boms_cache = {}
+        for bom in self.page.meta.boms:
+            rows = self.bom_loader.load_bom(
+                Path(self.page.file.abs_src_path).parent / bom.source, bom.namespace
+            )
+            self.page.boms_cache[bom.id] = Bom(
+                parts=[
+                    ItemEntry(
+                        name=item[0],
+                        qty=item[1],
+                        material=item[2],
+                        url=item[3],
+                    )
+                    for item in rows
+                ],
+                satisfies=self.page.meta.satisfies or [],
+                type=self.page.meta.type,
+                cad_url=self.page.meta.cad_url,
+            )
         return self.render_markdown(markdown, page, config)
 
     def on_post_build(self, config):
-        all_stls = Path(config['docs_dir']).parent / "stls"
-        shutil.copytree(all_stls, Path(config['site_dir']) / "stls")
+        with open(Path(config["docs_dir"]).parent / "vendors" / "template_superbom.csv", 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=",", quotechar='"')
+            writer.writerow(["namespace", "eva_part_name", "qty", "type", "vendor_part_name", "vendor_sku", "vendor_ignore"])
+            rows = get_superbom(self.db_conn)
+            for row in rows:
+                writer.writerow(list(row[0:4]) + ["", "", ""])
+
+        try:
+            vendors = config["vendors"]
+        except KeyError:
+            log.error("'vendors' key missing from config")
+            sys.exit(1)
+
+        for vendor in vendors:
+            self.bom_loader.load_vendor_mapping(
+                Path(config["docs_dir"]).parent / vendor["mapping_file"], vendor["name"]
+            )
+            with open(Path(config["docs_dir"]).parent / vendor["out_file"], 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=",", quotechar='"')
+                writer.writerow(["namespace", "eva_part_name", "qty", "type", "vendor_part_name", "vendor_sku"])
+                rows = get_vendor_superbom(self.db_conn, vendor["name"])
+                for row in rows:
+                    writer.writerow(row)
+            truncate_vendor_mapping(self.db_conn)
+
+        all_stls = Path(config["docs_dir"]).parent / "stls"
+        shutil.copytree(all_stls, Path(config["site_dir"]) / "stls")

@@ -1,3 +1,4 @@
+import json
 from enum import Enum
 from typing import List, Optional, Literal
 
@@ -14,6 +15,12 @@ class Satisfies(str, Enum):
     bed_probe = "bed_probe"
 
 
+class BomSource(BaseModel):
+    id: str
+    source: str
+    namespace: str
+
+
 class PageMeta(BaseModel):
     satisfies: List[str]
     type: Optional[str] = ""
@@ -24,6 +31,7 @@ class PageMeta(BaseModel):
     cad_url: Optional[Optional[str]]
     satisfies: Optional[List[Satisfies]]
     hide: Optional[List[str]]
+    boms: Optional[List[BomSource]] = []
 
 
 class ItemEntry(PropertyBaseModel):
@@ -45,6 +53,24 @@ class Bom(BaseModel):
     type: str
     satisfies: List[Satisfies]
     cad_url: Optional[str] = None
+
+    def json(self):
+        return json.dumps(self.dict())
+
+    def md_table(self, indent: int):
+        indent_str = " " * indent
+        rows = []
+        for index, item in enumerate(self.parts):
+            if index == 0:
+                rows.append(f"| Item | Quantity | Name | Type |")
+                rows.append("{}| {} |".format(
+                    indent_str, " | ".join(["-" * len(str(col)) for col in range(4)])
+                ))
+            if item.url:
+                rows.append(f"{indent_str}| {index + 1} | {item.qty} | [{item.name}]({item.url}) | {item.type} |")
+            else:
+                rows.append(f"{indent_str}| {index + 1} | {item.qty} | {item.name} | {item.type} |")
+        return "\n".join(rows)
 
 
 def get_page_meta(page):

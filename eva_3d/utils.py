@@ -1,4 +1,5 @@
 from typing import Union
+from base64 import b64encode
 
 from jinja2 import Markup
 from jinja2._compat import text_type
@@ -29,6 +30,13 @@ def escapejs(s):
     for key, value in _js_escapes.items():
         s = s.replace(key, value)
     return Markup(s)
+
+
+def escapeb64(s):
+    s = text_type(s)
+    s = b64encode(s.encode()).decode()
+    return Markup(s)
+
 
 
 class PropertyBaseModel(BaseModel):
