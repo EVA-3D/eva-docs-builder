@@ -112,4 +112,7 @@ class EVAPlugin(BasePlugin):
 
     def on_post_build(self, config):
         all_stls = Path(config['docs_dir']).parent / "stls"
-        shutil.copytree(all_stls, Path(config['site_dir']) / "stls")
+        if all_stls.exists():
+            shutil.copytree(all_stls, Path(config['site_dir']) / "stls")
+        else:
+            print("No root stls directory, not gathering all stls")

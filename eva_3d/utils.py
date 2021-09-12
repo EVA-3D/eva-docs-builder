@@ -1,7 +1,6 @@
 from typing import Union
 
 from jinja2 import Markup
-from jinja2._compat import text_type
 from pydantic import BaseModel
 
 
@@ -25,7 +24,7 @@ def escapejs(s):
     if hasattr(s, "__html__"):
         return Markup(s.__html__())
 
-    s = text_type(s)
+    s = str(s)
     for key, value in _js_escapes.items():
         s = s.replace(key, value)
     return Markup(s)
