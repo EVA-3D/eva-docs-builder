@@ -1,0 +1,3 @@
+[submodule "python-onshape-exporter"]
+	path = python-onshape-exporter
+	url = git@github.com:EVA-3D/python-onshape-exporter.git
