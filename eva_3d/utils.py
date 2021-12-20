@@ -5,7 +5,6 @@ from jinja2 import Markup
 from jinja2._compat import text_type
 from pydantic import BaseModel
 
-
 _js_escapes = {
     '\\': '\\u005C',
     '\'': '\\u0027',
@@ -36,7 +35,6 @@ def escapeb64(s):
     s = text_type(s)
     s = b64encode(s.encode()).decode()
     return Markup(s)
-
 
 
 class PropertyBaseModel(BaseModel):

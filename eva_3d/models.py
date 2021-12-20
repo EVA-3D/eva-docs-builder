@@ -22,7 +22,9 @@ class BomSource(BaseModel):
 
 
 class PageMeta(BaseModel):
+    title: str
     satisfies: List[str]
+    spec: Optional[str]
     type: Optional[str] = ""
     uid: Optional[str]
     badges: Optional[List[str]]
@@ -32,6 +34,11 @@ class PageMeta(BaseModel):
     satisfies: Optional[List[Satisfies]]
     hide: Optional[List[str]]
     boms: Optional[List[BomSource]] = []
+    usage: Optional[float]
+
+    @property
+    def percentage(self):
+        return f"{self.usage * 100} %"
 
 
 class ItemEntry(PropertyBaseModel):

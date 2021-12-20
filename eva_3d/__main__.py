@@ -1,13 +1,23 @@
-import sys
-import csv
+import asyncio
+import logging
 from pathlib import Path
 import shutil
-import zipfile
+from base64 import b64decode
+from zipfile import ZipFile, ZIP_DEFLATED
 
 import click
 from mkdocs import config
 from mkdocs.commands import build
+from python_onshape_exporter.client import Onshape
+from sqlmodel import Session
+from tqdm import tqdm
 
+from eva_3d.downloader import Downloader
+from eva_3d.db import create_db_and_tables, engine, BOMTable, BOMItem, remove_page_bom
+
+
+logging.basicConfig(level=logging.ERROR, force=True)
+logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
 @click.group()
 def main():
@@ -23,42 +33,104 @@ def page(ctx):
     ctx.obj["mkdocs_config"] = mkdocs_config
 
 
+async def download_and_save(n, session, downloader, page, pages_bar):
+    remove_page_bom(session, page.eva.uid)
+
+    b64image, bom, stls = await downloader.download(
+        n, page.eva.uid, page.eva.cad_url, pages_bar
+    )
+
+    image_path = (
+        Path(page.file.abs_src_path)
+        / ".."
+        / "assets"
+        / f"{Downloader.safe_filename(page.eva.uid)}.png"
+    ).resolve()
+
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(image_path, "wb") as image_file:
+        image_file.write(b64decode(b64image))
+
+    for name, stl in stls:
+        stl_path = (
+            Path(page.file.abs_src_path)
+            / ".."
+            / "stls"
+            / f"{Downloader.safe_filename(name)}.stl"
+        ).resolve()
+
+        shutil.rmtree(stl_path, ignore_errors=True)
+        stl_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(stl_path, "wb") as stl_file:
+            stl_file.write(stl)
+
+    bom_table = BOMTable(name=page.eva.uid)
+
+    for item in bom.items:
+        session.add(
+            BOMItem(
+                name=item.name,
+                material=item.material,
+                quantity=item.quantity,
+                bom_table=bom_table,
+            )
+        )
+    session.commit()
+
+
+async def download_all(session, downloader, pages):
+    pages_with_cad = [page for page in pages if page.eva.cad_url]
+
+    with tqdm(
+        desc="Processing pages: ", total=len(pages_with_cad), position=0
+    ) as pages_bar:
+        coros = [
+            download_and_save(n, session, downloader, page, pages_bar)
+            for n, page in enumerate(pages_with_cad)
+        ]
+        return await asyncio.gather(*coros)
+
+
 @page.command()
 @click.pass_context
-def unpack(ctx):
+@click.option("--page-uid", default=None, type=str)
+@click.option("--onshape-access-key", prompt=True, hide_input=True)
+@click.option("--onshape-secret-key", prompt=True, hide_input=True)
+def download(ctx, onshape_access_key, onshape_secret_key, page_uid=None, ):
+    create_db_and_tables()
+    session = Session(engine)
+
     mkdocs_config = ctx.obj["mkdocs_config"]
-    unpacker =  mkdocs_config["plugins"]["eva-3d-plugin"].unpacker
+    plugin = mkdocs_config["plugins"]["eva-3d-plugin"]
+    downloader = Downloader(onshape_access_key, onshape_secret_key)
+
+    if page_uid:
+        pages = [page for page in plugin.pages if page.eva.uid == page_uid]
+    else:
+        pages = plugin.pages
+
+    results = asyncio.run(download_all(session, downloader, pages))
+    result = results[0]
+
+
+@main.command()
+@click.pass_context
+def gather_stls(ctx):
     all_stls = (Path(".") / "stls").absolute()
-    unpacker.unpack_all(all_stls)
-    unpacker.archive(all_stls)
+    shutil.rmtree(all_stls, ignore_errors=True)
+    all_stls.mkdir(parents=True)
 
+    stl_paths = Path("docs").rglob("*.stl")
 
-@page.command()
-@click.pass_context
-@click.argument("vendor_name", type=str)
-@click.option("vendor_name", type=str)
-def vendor_superbom(ctx, vendor_name):
-    # TODO: move this to post build and walk to find all vendors/mappings
-    # TODO: on post build generate a blank _template.csv to compare between releases
-    mkdocs_config = ctx.obj["mkdocs_config"]
-    superbom =  mkdocs_config["plugins"]["eva-3d-plugin"].superbom
-    vendor_mapping_file_path = (Path(".") / "vendors" / f"{vendor_name}.csv")
-    vendor_mapping = {}
-    with open(vendor_mapping_file_path, newline="") as csvfile:
-        for row in csv.DictReader(csvfile, delimiter=",", quotechar='"'):
-            vendor_mapping[row["eva_part_name"]] = {
-                "name": row["vendor_part_name"],
-                "sku": row["vendor_sku"],
-                "ignore": True if row["vendor_ignore"] else False,
-            }
-    
-    print("qty,vendor_sku,vendor_part_name,eva_part_name")
-    for part in superbom.parts:
-        vendor_data = vendor_mapping[part.name]
-        if vendor_data["ignore"]:
-            continue
-        print(f"{part.qty},{vendor_data['sku']},{vendor_data['name']},{part.name}")
+    for src_stl_path in stl_paths:
+        dst_stl_path = (all_stls / Path(*src_stl_path.parts[1:])).resolve()
+        dst_stl_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_stl_path, dst_stl_path)
 
+    with ZipFile(all_stls.parent / "stls.zip", "w", ZIP_DEFLATED) as zip_file:
+        for file_path in all_stls.rglob("*.stl"):
+            zip_file.write(file_path, file_path.relative_to(all_stls.parent))
 
 
 if __name__ == "__main__":
