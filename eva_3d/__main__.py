@@ -95,9 +95,10 @@ async def download_all(session, downloader, pages):
 @page.command()
 @click.pass_context
 @click.option("--page-uid", default=None, type=str)
-@click.option("--onshape-access-key", prompt=True, hide_input=True)
-@click.option("--onshape-secret-key", prompt=True, hide_input=True)
-def download(ctx, onshape_access_key, onshape_secret_key, page_uid=None, ):
+@click.option("--path", default=None, type=click.Path())
+@click.option("--onshape-access-key", envvar="ONSHAPE_ACCESS", prompt=True, hide_input=True)
+@click.option("--onshape-secret-key", envvar="ONSHAPE_SECRET", prompt=True, hide_input=True)
+def download(ctx, path, onshape_access_key, onshape_secret_key, page_uid=None, ):
     create_db_and_tables()
     session = Session(engine)
 
@@ -105,10 +106,13 @@ def download(ctx, onshape_access_key, onshape_secret_key, page_uid=None, ):
     plugin = mkdocs_config["plugins"]["eva-3d-plugin"]
     downloader = Downloader(onshape_access_key, onshape_secret_key)
 
+    pages = plugin.pages
+    
     if page_uid:
-        pages = [page for page in plugin.pages if page.eva.uid == page_uid]
-    else:
-        pages = plugin.pages
+        pages = [page for page in pages if page.eva.uid == page_uid]
+    
+    if path:
+        pages = [page for page in pages if Path(path) in Path(page.file.src_path).parents]
 
     results = asyncio.run(download_all(session, downloader, pages))
     result = results[0]

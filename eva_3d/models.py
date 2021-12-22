@@ -1,6 +1,7 @@
+from decimal import Decimal
 import json
 from enum import Enum
-from typing import List, Optional, Literal
+from typing import List, Optional
 
 from pydantic import BaseModel, ValidationError
 from slugify import slugify
@@ -34,11 +35,11 @@ class PageMeta(BaseModel):
     satisfies: Optional[List[Satisfies]]
     hide: Optional[List[str]]
     boms: Optional[List[BomSource]] = []
-    usage: Optional[float]
+    usage: Optional[str]
 
     @property
     def percentage(self):
-        return f"{self.usage * 100} %"
+        return f"{(Decimal(self.usage) * 100).quantize(Decimal('.01'))} %"
 
 
 class ItemEntry(PropertyBaseModel):
