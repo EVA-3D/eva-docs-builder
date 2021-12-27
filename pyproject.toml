@@ -18,6 +18,8 @@ python-slugify = "^5"
 Jinja2 = "^2"
 python-onshape-exporter = {path = "python-onshape-exporter", develop = true}
 tqdm = "^4.62.3"
+sqlmodel = "^0.0.4"
+Pillow = "^8.4.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
