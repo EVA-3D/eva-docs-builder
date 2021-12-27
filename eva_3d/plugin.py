@@ -1,10 +1,12 @@
 import hashlib
 import logging
 import json 
+from pathlib import Path
 
 from mkdocs.config import config_options
 from mkdocs.plugins import BasePlugin
 from sqlmodel import Session, select
+from PIL import Image
 
 from eva_3d import db
 from eva_3d.models import get_page_meta
@@ -78,6 +80,7 @@ class EVAPlugin(BasePlugin):
             "cad_link": self.cad_link,
             "get_bom": self.get_bom,
             "icon": self.get_icon,
+            "crop": self.crop,
             **self.context,
         }
 
@@ -110,6 +113,14 @@ class EVAPlugin(BasePlugin):
     def render_markdown(self, markdown, page, config):
         md_template = self.env.from_string(markdown)
         return md_template.render(**self._get_markdown_context(page, config))
+
+    def crop(self, image_url: str, left: int, upper: int, right: int, lower: int):
+        page_path = Path(self.page.file.src_path)
+        image_path = Path(self.config["docs_dir"]) / page_path.parent / Path(image_url)
+        new_image_path = image_path.parent / f"{image_path.stem}_crop_{left}x{upper}x{right}x{lower}{image_path.suffix}"
+        if not new_image_path.exists():
+            Image.open(image_path).crop((left, upper, right, lower)).save(new_image_path)
+        return str(Path(image_url).parent / new_image_path.name)
 
     def on_page_markdown(self, markdown, page, config, files):
         self.add_page(page)

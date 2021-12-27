@@ -16,13 +16,11 @@ class Downloader:
     def __init__(self, onshape_access_key, onshape_secret_key):
         self.onshape_access_key = onshape_access_key
         self.onshape_secret_key = onshape_secret_key
-    # def __init__(self, onshape_client: Onshape):
-        # self.onshape_client = onshape_client
 
     @staticmethod
     def safe_filename(filename):
         return "".join(
-            [c for c in filename if c.isalpha() or c.isdigit() or c == " " or c == "_"]
+            [c for c in filename if c.isalpha() or c.isdigit() or c == " " or c == "_" or c == "-"]
         ).rstrip()
 
     def split_cad_url(self, cad_url):
