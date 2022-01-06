@@ -34,17 +34,17 @@ def page(ctx):
 
 
 async def download_and_save(n, session, downloader, page, pages_bar):
-    remove_page_bom(session, page.eva.uid)
+    remove_page_bom(session, page.meta.onshape.uid)
 
     b64image, bom, stls = await downloader.download(
-        n, page.eva.uid, page.eva.cad_url, pages_bar
+        n, page.meta.onshape.uid, page.meta.onshape.cad_url, pages_bar
     )
 
     image_path = (
         Path(page.file.abs_src_path)
         / ".."
         / "assets"
-        / f"{Downloader.safe_filename(page.eva.uid)}.png"
+        / f"{Downloader.safe_filename(page.meta.onshape.uid)}.png"
     ).resolve()
 
     image_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +65,7 @@ async def download_and_save(n, session, downloader, page, pages_bar):
         with open(stl_path, "wb") as stl_file:
             stl_file.write(stl)
 
-    bom_table = BOMTable(name=page.eva.uid)
+    bom_table = BOMTable(name=page.meta.onshape.uid)
 
     for item in bom.items:
         session.add(
@@ -80,7 +80,7 @@ async def download_and_save(n, session, downloader, page, pages_bar):
 
 
 async def download_all(session, downloader, pages):
-    pages_with_cad = [page for page in pages if page.eva.cad_url]
+    pages_with_cad = [page for page in pages if page.meta.onshape]
 
     with tqdm(
         desc="Processing pages: ", total=len(pages_with_cad), position=0
@@ -109,7 +109,7 @@ def download(ctx, path, onshape_access_key, onshape_secret_key, page_uid=None, )
     pages = plugin.pages
     
     if page_uid:
-        pages = [page for page in pages if page.eva.uid == page_uid]
+        pages = [page for page in pages if page.meta.onshape.uid == page_uid]
     
     if path:
         pages = [page for page in pages if Path(path) in Path(page.file.src_path).parents]

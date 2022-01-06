@@ -4,6 +4,7 @@ from tqdm import tqdm
 
 from python_onshape_exporter.client import Onshape
 from python_onshape_exporter.schemas import BOMTable
+from slugify import slugify
 
 
 CAD_URL_PATTERN = re.compile(
@@ -19,9 +20,7 @@ class Downloader:
 
     @staticmethod
     def safe_filename(filename):
-        return "".join(
-            [c for c in filename if c.isalpha() or c.isdigit() or c == " " or c == "_" or c == "-"]
-        ).rstrip()
+        return slugify(filename)
 
     def split_cad_url(self, cad_url):
         match = CAD_URL_PATTERN.match(cad_url)
