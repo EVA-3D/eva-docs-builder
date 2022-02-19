@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import logging
 from pathlib import Path
 import shutil
@@ -8,7 +9,6 @@ from zipfile import ZipFile, ZIP_DEFLATED
 import click
 from mkdocs import config
 from mkdocs.commands import build
-from python_onshape_exporter.client import Onshape
 from sqlmodel import Session
 from tqdm import tqdm
 
@@ -25,6 +25,25 @@ logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 def main():
     pass
 
+@main.command()
+@click.argument("bom-name", type=str)
+@click.argument("csv-file", type=click.File("r"))
+def load_csv_bom(bom_name, csv_file):
+    create_db_and_tables()
+    session = Session(engine)
+    remove_page_bom(session, bom_name)
+    bom_table = BOMTable(name=bom_name)
+
+    for row in csv.DictReader(csv_file, delimiter=",", quotechar='"'):
+        session.add(
+            BOMItem(
+                name=row["Name"],
+                material=row["Material"],
+                quantity=row["Quantity"],
+                bom_table=bom_table,
+            )
+        )
+    session.commit()
 
 @main.group()
 @click.pass_context

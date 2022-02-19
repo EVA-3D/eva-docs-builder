@@ -36,17 +36,6 @@ class EVAPlugin(BasePlugin):
         ),
     )
 
-    def requires_onshape(func):
-        def inner(self, *args, **kwargs):
-            if not self.page.eva.onshape:
-                log.warning(
-                    f"You are trying to use a template function that is only available when Onshape metadata is present in page: {self.page}"
-                )
-                return ""
-            return func(self, *args, **kwargs)
-
-        return inner
-
     def on_config(self, config):
         self.context = {}
         config["version"] = self.config["version"]
@@ -155,12 +144,13 @@ class EVAPlugin(BasePlugin):
             True,
         )
 
-    @requires_onshape
-    def get_bom(self):
+    def get_bom(self, page_uid=None):
+        if page_uid is None:
+            page_uid = self.page.eva.onshape.uid
         stmt = (
             select(db.BOMTable, db.BOMItem)
             .where(db.BOMItem.bom_table_id == db.BOMTable.id)
-            .where(db.BOMTable.name == self.page.eva.onshape.uid)
+            .where(db.BOMTable.name == page_uid)
         )
         first = self.session.exec(stmt).first()
         if first:
