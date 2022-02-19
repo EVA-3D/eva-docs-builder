@@ -15,9 +15,11 @@ from tqdm import tqdm
 from eva_3d.downloader import Downloader
 from eva_3d.db import create_db_and_tables, engine, BOMTable, BOMItem, remove_page_bom
 
+DOWNLOAD_SEMAPHORE = asyncio.Semaphore(5)
 
 logging.basicConfig(level=logging.ERROR, force=True)
 logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
+
 
 @click.group()
 def main():
@@ -53,10 +55,7 @@ async def download_and_save(n, session, downloader, page, pages_bar):
 
     for name, stl in stls:
         stl_path = (
-            Path(page.file.abs_src_path)
-            / ".."
-            / "stls"
-            / f"{Downloader.safe_filename(name)}.stl"
+            Path(page.file.abs_src_path) / ".." / "stls" / f"{name}.stl"
         ).resolve()
 
         shutil.rmtree(stl_path, ignore_errors=True)
@@ -89,16 +88,27 @@ async def download_all(session, downloader, pages):
             download_and_save(n, session, downloader, page, pages_bar)
             for n, page in enumerate(pages_with_cad)
         ]
-        return await asyncio.gather(*coros)
+        async with DOWNLOAD_SEMAPHORE:
+            return await asyncio.gather(*coros)
 
 
 @page.command()
 @click.pass_context
 @click.option("--page-uid", default=None, type=str)
 @click.option("--path", default=None, type=click.Path())
-@click.option("--onshape-access-key", envvar="ONSHAPE_ACCESS", prompt=True, hide_input=True)
-@click.option("--onshape-secret-key", envvar="ONSHAPE_SECRET", prompt=True, hide_input=True)
-def download(ctx, path, onshape_access_key, onshape_secret_key, page_uid=None, ):
+@click.option(
+    "--onshape-access-key", envvar="ONSHAPE_ACCESS", prompt=True, hide_input=True
+)
+@click.option(
+    "--onshape-secret-key", envvar="ONSHAPE_SECRET", prompt=True, hide_input=True
+)
+def download(
+    ctx,
+    path,
+    onshape_access_key,
+    onshape_secret_key,
+    page_uid=None,
+):
     create_db_and_tables()
     session = Session(engine)
 
@@ -107,12 +117,14 @@ def download(ctx, path, onshape_access_key, onshape_secret_key, page_uid=None, )
     downloader = Downloader(onshape_access_key, onshape_secret_key)
 
     pages = plugin.pages
-    
+
     if page_uid:
         pages = [page for page in pages if page.meta.onshape.uid == page_uid]
-    
+
     if path:
-        pages = [page for page in pages if Path(path) in Path(page.file.src_path).parents]
+        pages = [
+            page for page in pages if Path(path) in Path(page.file.src_path).parents
+        ]
 
     results = asyncio.run(download_all(session, downloader, pages))
     result = results[0]

@@ -1,8 +1,7 @@
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, ValidationError
-from pydantic.config import Extra
+from pydantic import BaseModel, Extra
 from pydantic.networks import HttpUrl
 from slugify import slugify
 
@@ -14,6 +13,7 @@ class OnshapeMeta(BaseModel):
     @property
     def uid_slug(self):
         return slugify(self.uid)
+
 
 class BasePageMeta(BaseModel):
     title: str

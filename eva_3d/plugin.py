@@ -38,7 +38,7 @@ class EVAPlugin(BasePlugin):
 
     def requires_onshape(func):
         def inner(self, *args, **kwargs):
-            if not self.page.meta.onshape:
+            if not self.page.eva.onshape:
                 log.warning(
                     f"You are trying to use a template function that is only available when Onshape metadata is present in page: {self.page}"
                 )
@@ -62,10 +62,10 @@ class EVAPlugin(BasePlugin):
 
         try:
             config["meta_model_class"] = import_string(self.config["meta_model_class"])
-        except ImportError:
+        except ImportError as exc:
             raise PluginError(
-                f"Meta Model Class {self.config['meta_model_class']} could not be imported."
-            )
+                f"Meta Model Class {self.config['meta_model_class']} could not be imported. {exc}"
+            ) from exc
 
         return config
 
@@ -111,6 +111,7 @@ class EVAPlugin(BasePlugin):
     def _get_markdown_context(self, page, config):
         return {
             "meta": page.meta,
+            "eva": page.eva,
             "config": config,
             "cad_link": self.cad_link,
             "button": self.button,
@@ -145,11 +146,11 @@ class EVAPlugin(BasePlugin):
 
     @property
     def cad_link(self):
-        if not self.page.meta.onshape:
+        if not self.page.eva.onshape:
             return ""
         return self.button(
             "CAD",
-            self.page.meta.onshape.cad_url,
+            self.page.eva.onshape.cad_url,
             ":fontawesome-solid-file-import:",
             True,
         )
@@ -159,7 +160,7 @@ class EVAPlugin(BasePlugin):
         stmt = (
             select(db.BOMTable, db.BOMItem)
             .where(db.BOMItem.bom_table_id == db.BOMTable.id)
-            .where(db.BOMTable.name == self.page.meta.onshape.uid)
+            .where(db.BOMTable.name == self.page.eva.onshape.uid)
         )
         first = self.session.exec(stmt).first()
         if first:

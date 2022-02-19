@@ -13,7 +13,6 @@ CAD_URL_PATTERN = re.compile(
 
 
 class Downloader:
-
     def __init__(self, onshape_access_key, onshape_secret_key):
         self.onshape_access_key = onshape_access_key
         self.onshape_secret_key = onshape_secret_key
@@ -40,7 +39,6 @@ class Downloader:
         )
         return image_response["images"][0]
 
-
     async def fetch_bom(self, onshape, assembly_name, did, wid, eid):
         onshape_data = await onshape.get_assembly_bom(
             did=did,
@@ -63,7 +61,7 @@ class Downloader:
         did, wid, eid = self.split_cad_url(cad_url)
         async with Onshape(
             access_key=self.onshape_access_key,
-            secret_key=self.onshape_secret_key,   
+            secret_key=self.onshape_secret_key,
         ) as onshape:
             results = await asyncio.gather(
                 self.fetch_image(onshape, did, wid, eid),
@@ -74,8 +72,14 @@ class Downloader:
                 if isinstance(result, BaseException):
                     raise result
 
-            printable_items = [bom_item for bom_item in results[1].items if bom_item.is_printable]
-            with tqdm(desc=f"Exporting SLTs from Onshape for {assembly_name}: ", total=len(printable_items), position=n+1) as stl_bar:
+            printable_items = [
+                bom_item for bom_item in results[1].items if bom_item.is_printable
+            ]
+            with tqdm(
+                desc=f"Exporting SLTs from Onshape for {assembly_name}: ",
+                total=len(printable_items),
+                position=n + 1,
+            ) as stl_bar:
                 coros = [
                     self.fetch_stl(
                         onshape=onshape,
@@ -90,7 +94,6 @@ class Downloader:
                     )
                     for bom_item in printable_items
                 ]
-
                 stl_results = await asyncio.gather(*coros)
                 for stl_result in stl_results:
                     if isinstance(stl_result, BaseException):

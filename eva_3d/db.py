@@ -8,6 +8,7 @@ from sqlmodel.sql.expression import select
 
 warnings.simplefilter("ignore", category=sa_exc.SAWarning)
 
+
 class BOMTable(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -34,6 +35,7 @@ sqlite_url = f"sqlite:///{sqlite_file_name}"
 # engine = create_engine(sqlite_url, echo=True)
 engine = create_engine(sqlite_url)
 
+
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
@@ -41,7 +43,9 @@ def create_db_and_tables():
 def remove_page_bom(session, page_uid):
     tables = session.exec(select(BOMTable).where(BOMTable.name == page_uid)).all()
     for table in tables:
-        items = session.exec(select(BOMItem).where(BOMItem.bom_table_id == table.id)).all()
+        items = session.exec(
+            select(BOMItem).where(BOMItem.bom_table_id == table.id)
+        ).all()
         for item in items:
             session.delete(item)
         session.delete(table)

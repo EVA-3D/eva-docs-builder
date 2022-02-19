@@ -46,6 +46,7 @@ def escapeb64(s):
 
 
 def read_source(self, config):
+    self.eva = None
     try:
         with open(
             self.file.abs_src_path, "r", encoding="utf-8-sig", errors="strict"
@@ -68,11 +69,11 @@ def read_source(self, config):
             raise BuildError(f"Page's YAML metadata is malformed: {exc}")
 
         try:
-            self.meta = config["meta_model_class"](**data)
+            self.eva = config["meta_model_class"](**data)
         except ValidationError as exc:
             raise PluginError(
                 f"Deserializing {self} page's meta failed with the following errors: {exc}"
             )
 
     self.markdown = source
-    self.title = self.meta.title
+    self.title = self.eva.title
